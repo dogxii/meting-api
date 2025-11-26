@@ -13,6 +13,22 @@ const METING_COOKIE_NETEASE =
     process.env.METING_COOKIE_NETEASE) ||
   "";
 
+// 读取允许注入 cookie 的域名（支持逗号分隔多个域名）
+const METING_COOKIE_NETEASE_DOMAIN =
+  (typeof Deno !== "undefined" &&
+    Deno.env &&
+    Deno.env.get &&
+    Deno.env.get("METING_COOKIE_NETEASE_DOMAIN")) ||
+  (typeof process !== "undefined" &&
+    process.env &&
+    process.env.METING_COOKIE_NETEASE_DOMAIN) ||
+  "";
+const METING_COOKIE_NETEASE_DOMAIN_LIST = METING_COOKIE_NETEASE_DOMAIN
+  ? METING_COOKIE_NETEASE_DOMAIN.split(",")
+      .map((d) => d.trim())
+      .filter(Boolean)
+  : [];
+
 const nanoid = customAlphabet("1234567890abcdef", 32);
 
 const chooseUserAgent = (ua = false) => {
@@ -74,8 +90,26 @@ export const request = async (method, url, data = {}, options) => {
     headers["X-Forwarded-For"] = ip;
   }
   // headers['X-Real-IP'] = '118.88.88.88'
-  // 优先使用环境变量 METING_COOKIE_NETEASE
-  if (METING_COOKIE_NETEASE) {
+  // 只允许指定域名才注入 METING_COOKIE_NETEASE
+  let allowCookie = false;
+  if (METING_COOKIE_NETEASE && METING_COOKIE_NETEASE_DOMAIN_LIST.length > 0) {
+    // 支持 Host、Origin、Referer 检查多个域名
+    const host = headers["Host"] || headers["host"] || "";
+    const origin = headers["Origin"] || headers["origin"] || "";
+    const referer = headers["Referer"] || headers["referer"] || "";
+    for (const domain of METING_COOKIE_NETEASE_DOMAIN_LIST) {
+      if (
+        (host && host.indexOf(domain) !== -1) ||
+        (origin && origin.indexOf(domain) !== -1) ||
+        (referer && referer.indexOf(domain) !== -1)
+      ) {
+        allowCookie = true;
+        break;
+      }
+    }
+  }
+
+  if (METING_COOKIE_NETEASE && allowCookie) {
     headers["Cookie"] = METING_COOKIE_NETEASE;
   } else if (typeof options.cookie === "undefined") {
     options.cookie = {};
